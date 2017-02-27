@@ -1,0 +1,15 @@
+{
+  "name": "tenon-lite",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "express": "^4.14.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Ryan Veitch",
+  "license": "ISC"
+}
