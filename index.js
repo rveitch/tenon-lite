@@ -34,24 +34,26 @@ let realm = new Realm({
 /* Publish article endpoint */
 app.use('/publish', function (req, res) {
 
-	realm.write(() => {
-		let newArticle = realm.create('article', {
-			id: req.body.id,
-			title: req.body.title,
-			published: req.body.published,
-			created: req.body.created,
-			modified: req.body.modified,
-			url: req.body.url,
-			body: req.body.body,
-			description: req.body.description,
-		}, true);
-	});
+	if (req.body.id) {
+		realm.write(() => {
+			let newArticle = realm.create('article', {
+				id: req.body.id,
+				title: req.body.title,
+				published: req.body.published,
+				created: req.body.created,
+				modified: req.body.modified,
+				url: req.body.url,
+				body: req.body.body,
+				description: req.body.description,
+			}, true);
+		});
+	}
 
 	var responseMessage = {
 		'headers': req.headers,
 		'body': req.body,
 	};
-	
+
 	console.log(responseMessage);
 	res.json(responseMessage);
 });
