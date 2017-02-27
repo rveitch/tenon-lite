@@ -67,14 +67,15 @@ app.get('/articles', function (req, res) {
 
 /* Default Endpoint */
 app.use('/', function (req, res) {
+	var baseURL = req.protocol + '://' + req.headers.host;
 	var responseMessage = {
 		'routes': {
 			'/articles': {
-				path: 'http://localhost/articles',
+				path: baseURL + '/articles',
 				method: 'GET',
 			},
 			'/publish': {
-				path: 'http://localhost/publish',
+				path: baseURL + '/publish',
 				method: 'PUT',
 			}
 		},
