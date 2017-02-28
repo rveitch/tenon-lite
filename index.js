@@ -1,13 +1,15 @@
 'use strict';
 
+var dotenv = require('dotenv');
+dotenv.load();
 var express = require('express');
 var app = express();
-	var bodyParser = require('body-parser');
+var bodyParser = require('body-parser');
 var Realm = require('realm');
 var port = Number(process.env.PORT || 3000);
 
-app.use(bodyParser.json()); // for parsing application/json
-app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 app.set('json spaces', 2);
 app.enable('trust proxy');
 
@@ -28,6 +30,10 @@ var ArticleSchema = {
 
 let realm = new Realm({
 	schema: [ArticleSchema],
+	sync: {
+    user: Realm.Sync.User.adminUser(process.env.REALM_ADMIN_TOKEN),
+    url: 'realm://ec2-54-146-162-14.compute-1.amazonaws.com:9080/article'
+  },
 	path: './realm-data/articles.realm'
 });
 
