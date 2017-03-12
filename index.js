@@ -72,7 +72,7 @@ app.get('/articles', function (req, res) {
 });
 
 /* Default Endpoint */
-app.use('/', function (req, res) {
+app.all('/', function (req, res) {
 	var baseURL = req.protocol + '://' + req.headers.host;
 	var responseMessage = {
 		'routes': {
