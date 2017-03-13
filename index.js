@@ -9,6 +9,7 @@ var bodyParser = require('body-parser');
 var Realm = require('realm');
 var deepstream = require( 'deepstream.io-client-js' );
 var ds = deepstream( process.env.DEEPSTREAM || 'localhost:6020' );
+var articleList = ds.record.getList( 'articles' );
 var port = Number(process.env.PORT || 3000);
 
 app.use(bodyParser.json());
@@ -42,33 +43,50 @@ let realm = new Realm({
 });
 
 /*** Deepstream ***/
-ds.login({ username: 'tenon-lite server' }).on('connectionStateChanged', connectionState => {
-	console.log('Deepstream Client: ' + connectionState);
-}).on( 'error', function() {
+ds.on( 'error', function() {
 	console.log( 'error', arguments )
 });
+/*ds.login({ username: 'tenon-lite server' }).on('connectionStateChanged', connectionState => {
+	console.log('Deepstream Client: ' + connectionState);
+	if (connectionState == 'OPEN') {
+		console.log('Deepstream Client now OPEN');
+		//dsSync();
+	}
+}).on( 'error', function() {
+	console.log( 'error', arguments )
+});*/
 
-var articleList = ds.record.getList( 'articles' );
-articleList.whenReady( ( list ) => {
-	realm.objects('article').map(function (article) {
-		dsWrite(article); // add current REALM entries to deepstream
+
+
+function dsLogin(callback) {
+	ds.login({ username: 'tenon-lite server' }).on('connectionStateChanged', connectionState => {
+		console.log('Deepstream Client: ' + connectionState);
+		if (connectionState == 'OPEN') {
+			console.log('Deepstream Client: CONNECTION IS NOW OPEN');
+			callback(null);
+		}
 	});
-	console.log( list.getEntries() );
-});
+}
 
-function dsWrite(article) {
+function dsSync(callback) {
+	articleList.whenReady( ( list ) => {
+		realm.objects('article').map(function (article) {
+			dsWrite(article); // add current REALM entries to deepstream
+		});
+		callback(null);
+	});
+}
+
+function dsWrite(article, callback) {
 	const recordName = article.id || 'article/' + ds.getUid(); // recordName 'article/iq6auu7d-p9i1vz3q0yi'
 	ds.record.has(recordName, function (err, has) {
-		if ( has ) { // update
-			const articleRecord = ds.record.getRecord(recordName);
-			articleRecord.set(article);
-			console.log('Article ' + article.id + ' UPDATED to deepstream');
-		} else { // create
-			const articleRecord = ds.record.getRecord(recordName); // getRecord 'article/iq6auu7d-p9i1vz3q0yi'
-			articleRecord.set(article); // set
-			articleList.addEntry(recordName) // addEntry (tolist)
-			console.log('Article ' + article.id + ' ADDED to deepstream');
+		const articleStatus = ( has ) ? 'UPDATED' : 'ADDED'
+		const articleRecord = ds.record.getRecord(recordName);
+		articleRecord.set(article);
+		if ( articleList.getEntries().indexOf(recordName) == -1 ) {
+			articleList.addEntry(recordName) // add entry to list
 		}
+		return console.log('Article ' + articleStatus + ' to deepstream: ' + article.id);
 	});
 }
 
@@ -120,6 +138,17 @@ app.get('/articles/deepstream', function (req, res) {
 	res.json(dsArticleList);
 });
 
+/* List Articles in Deepstream */
+app.get('/articles/deepstream', function (req, res) {
+	var dsArticleList = [];
+	articleList.getEntries().map((recordName) => {
+		ds.record.getRecord(recordName).whenReady(record => {
+			dsArticleList.push(record.get());
+		});
+	})
+	res.json(dsArticleList);
+});
+
 /* Default Endpoint */
 app.all('/', function (req, res) {
 	var baseURL = req.protocol + '://' + req.headers.host;
@@ -146,5 +175,12 @@ app.all('/', function (req, res) {
 });
 
 app.listen(port, function () {
-	console.log('App server is running on http://localhost:' + port);
+	async.waterfall([
+	    dsLogin,
+	    dsSync,
+	    //myLastFunction,
+	], function (err, result) {
+	    // results
+			console.log('App server is running on http://localhost:' + port);
+	});
 });
