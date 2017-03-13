@@ -184,18 +184,6 @@ app.get('/articles/deepstream', function (req, res) {
 });
 
 
-/* List Articles in Deepstream */
-app.get('/articles/deepstream', function (req, res) {
-	var dsArticleList = [];
-	articleList.getEntries().map((recordName) => {
-		ds.record.getRecord(recordName).whenReady(record => {
-			dsArticleList.push(record.get());
-		});
-	})
-	res.json(dsArticleList);
-});
-
-
 /* Default Endpoint */
 app.all('/', function (req, res) {
 	var baseURL = req.protocol + '://' + req.headers.host;
