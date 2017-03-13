@@ -2,6 +2,7 @@
 
 var dotenv = require('dotenv');
 dotenv.load();
+var colors = require('colors');
 var async = require('async');
 var express = require('express');
 var app = express();
@@ -17,7 +18,8 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.set('json spaces', 2);
 app.enable('trust proxy');
 
-/*** Realm ***/
+/********************************* REALM SETUP ********************************/
+
 var ArticleSchema = {
   name: 'article',
 	primaryKey: 'id',
@@ -42,21 +44,46 @@ let realm = new Realm({
 	path: './realm-data/articles.realm'
 });
 
-/*** Deepstream ***/
+var SERVER_URL = 'realm://ec2-54-146-162-14.compute-1.amazonaws.com:9080';
+var NOTIFIER_PATH = '.*/article';
+var admin_user = Realm.Sync.User.adminUser(process.env.REALM_ADMIN_TOKEN);
+
+var change_notification_callback = function(changeEvent) {
+	let realm = changeEvent.realm;
+	let changes = changeEvent.changes.article; // console.log(changes); // changes array
+	var articles = realm.objects("article");
+	var oldRealm = changeEvent.oldRealm.objects("article");
+
+	// Deletions: Update in response to deleted objects
+	changes.deletions.forEach((index) => {
+		let deletedArticle = oldRealm[index];
+		dsDelete(deletedArticle);
+		console.log('DELETED Article from Realm: '.red + deletedArticle.id); //console.log(deletedArticle);
+  });
+
+	// Insertions: Update in response to inserted objects
+  changes.insertions.forEach((index) => {
+    let insertedArticle = articles[index];
+		dsWrite(insertedArticle);
+		console.log('INSERT Article from Realm: '.green + insertedArticle.id); //console.log(insertedArticle);
+  });
+
+	// Modifications: Update in response to modified objects
+	changes.modifications.forEach((index) => {
+    let modifiedArticle = articles[index];
+		dsWrite(modifiedArticle);
+		console.log('MODIFIED Article from Realm: '.blue + modifiedArticle.id); //console.log(modifiedArticle);
+  });
+
+};
+Realm.Sync.addListener(SERVER_URL, admin_user, NOTIFIER_PATH, 'change', change_notification_callback);
+
+
+/****************************** DEEPSTREAM SYNC *******************************/
+
 ds.on( 'error', function() {
 	console.log( 'error', arguments )
 });
-/*ds.login({ username: 'tenon-lite server' }).on('connectionStateChanged', connectionState => {
-	console.log('Deepstream Client: ' + connectionState);
-	if (connectionState == 'OPEN') {
-		console.log('Deepstream Client now OPEN');
-		//dsSync();
-	}
-}).on( 'error', function() {
-	console.log( 'error', arguments )
-});*/
-
-
 
 function dsLogin(callback) {
 	ds.login({ username: 'tenon-lite server' }).on('connectionStateChanged', connectionState => {
@@ -78,17 +105,35 @@ function dsSync(callback) {
 }
 
 function dsWrite(article, callback) {
-	const recordName = article.id || 'article/' + ds.getUid(); // recordName 'article/iq6auu7d-p9i1vz3q0yi'
+	const recordName = article.id || 'article/' + ds.getUid();
 	ds.record.has(recordName, function (err, has) {
-		const articleStatus = ( has ) ? 'UPDATED' : 'ADDED'
+		const articleStatus = ( has ) ? 'UPDATED' : 'ADDED';
 		const articleRecord = ds.record.getRecord(recordName);
 		articleRecord.set(article);
 		if ( articleList.getEntries().indexOf(recordName) == -1 ) {
 			articleList.addEntry(recordName) // add entry to list
 		}
-		return console.log('Article ' + articleStatus + ' to deepstream: ' + article.id);
+		return console.log(articleStatus.cyan + ' Article to Deepstream: '.cyan + article.id);
 	});
 }
+
+function dsDelete(article, callback) {
+	const recordName = article.id || 'article/' + ds.getUid();
+	ds.record.has(recordName, function (err, has) {
+		if ( has ) {
+			const articleRecord = ds.record.getRecord(recordName);
+			articleRecord.delete();
+			if ( articleList.getEntries().indexOf(recordName) > -1 ) {
+				articleList.removeEntry(recordName) // remove entry from list
+			}
+			return console.log('DELETED Article from Deepstream: '.cyan + article.id);
+		} else {
+			return // article not found
+		}
+	});
+}
+
+/******************************* EXPRESS ROUTES *******************************/
 
 /* Publish article endpoint */
 app.use('/publish', function (req, res) {
@@ -104,11 +149,10 @@ app.use('/publish', function (req, res) {
 			body: req.body.body,
 			description: req.body.description,
 		}
-		dsWrite(article);
 		realm.write(() => {
 			let newArticle = realm.create('article', article, true);
 		});
-
+		//dsWrite(article);
 	}
 
 	var responseMessage = {
@@ -127,16 +171,6 @@ app.get('/articles', function (req, res) {
 	res.json(articles);
 });
 
-/* List Articles in Deepstream */
-app.get('/articles/deepstream', function (req, res) {
-	var dsArticleList = [];
-	articleList.getEntries().map((recordName) => {
-		ds.record.getRecord(recordName).whenReady(record => {
-			dsArticleList.push(record.get());
-		});
-	})
-	res.json(dsArticleList);
-});
 
 /* List Articles in Deepstream */
 app.get('/articles/deepstream', function (req, res) {
@@ -148,6 +182,19 @@ app.get('/articles/deepstream', function (req, res) {
 	})
 	res.json(dsArticleList);
 });
+
+
+/* List Articles in Deepstream */
+app.get('/articles/deepstream', function (req, res) {
+	var dsArticleList = [];
+	articleList.getEntries().map((recordName) => {
+		ds.record.getRecord(recordName).whenReady(record => {
+			dsArticleList.push(record.get());
+		});
+	})
+	res.json(dsArticleList);
+});
+
 
 /* Default Endpoint */
 app.all('/', function (req, res) {
@@ -174,13 +221,15 @@ app.all('/', function (req, res) {
 	res.json(responseMessage);
 });
 
+
+/******************************* SERVER LISTEN ********************************/
+
 app.listen(port, function () {
 	async.waterfall([
 	    dsLogin,
 	    dsSync,
-	    //myLastFunction,
 	], function (err, result) {
-	    // results
 			console.log('App server is running on http://localhost:' + port);
 	});
+	console.log('App server is running on http://localhost:' + port);
 });
