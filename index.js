@@ -21,7 +21,7 @@ app.enable('trust proxy');
 /********************************* REALM SETUP ********************************/
 
 var ArticleSchema = {
-  name: 'article',
+  name: 'articles',
 	primaryKey: 'id',
   properties: {
 		id: {type: 'string'},
@@ -39,20 +39,29 @@ let realm = new Realm({
 	schema: [ArticleSchema],
 	sync: {
     user: Realm.Sync.User.adminUser(process.env.REALM_ADMIN_TOKEN),
-    url: 'realm://ec2-54-146-162-14.compute-1.amazonaws.com:9080/article'
+    url: 'realm://ec2-54-146-162-14.compute-1.amazonaws.com:9080/articles'
   },
 	path: './realm-data/articles.realm'
 });
 
+realm.objects('articles').addListener((articles, changes) => {
+  console.log(articles);
+  console.log(changes);
+  console.log(changes.deletions);
+  console.log(changes.insertions);
+  console.log(changes.modifications);
+    //resolve();
+});
+
 var SERVER_URL = 'realm://ec2-54-146-162-14.compute-1.amazonaws.com:9080';
-var NOTIFIER_PATH = '.*/article';
+var NOTIFIER_PATH = '.*/articles';
 var admin_user = Realm.Sync.User.adminUser(process.env.REALM_ADMIN_TOKEN);
 
 var change_notification_callback = function(changeEvent) {
 	let realm = changeEvent.realm;
 	let changes = changeEvent.changes.article; // console.log(changes); // changes array
-	var articles = realm.objects("article");
-	var oldRealm = changeEvent.oldRealm.objects("article");
+	var articles = realm.objects("articles");
+	var oldRealm = changeEvent.oldRealm.objects("articles");
 
 	// Deletions: Update in response to deleted objects
 	changes.deletions.forEach((index) => {
@@ -97,7 +106,7 @@ function dsLogin(callback) {
 
 function dsSync(callback) {
 	articleList.whenReady( ( list ) => {
-		realm.objects('article').map(function (article) {
+		realm.objects('articles').map(function (article) {
 			dsWrite(article); // add current REALM entries to deepstream
 		});
 		callback(null);
@@ -150,7 +159,7 @@ app.use('/publish', function (req, res) {
 			description: req.body.description,
 		}
 		realm.write(() => {
-			let newArticle = realm.create('article', article, true);
+			let newArticle = realm.create('articles', article, true);
 		});
 		//dsWrite(article);
 	}
@@ -166,7 +175,7 @@ app.use('/publish', function (req, res) {
 
 /* List Articles in Realm */
 app.get('/articles', function (req, res) {
-	let articles = realm.objects('article');
+	let articles = realm.objects('articles');
 	//console.log(articles);
 	res.json(articles);
 });
